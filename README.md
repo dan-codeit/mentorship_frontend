@@ -1,4 +1,4 @@
-#Danitors
+# Danitors
 Danitors is a modern frontend web application built with React, Vite, and TypeScript that connects mentors and mentees. It facilitates mentorship scheduling, availability management, and request handling — all from the frontend.
 
 ## Features
@@ -21,7 +21,7 @@ Clone the repo:
 
 
 ```bash
-git clone https://github.com/your-username/mentorconnect.git
+git clone https://github.com/dan-codeit/mentorship_frontend.git
 cd mentorconnect
 Install dependencies:
 ```
