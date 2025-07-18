@@ -26,3 +26,11 @@ export const handleLogin = async (email: string, password: string) => {
   });
   return response.data;
 };
+
+export const updateMentorAvailability = async (email: string, password: string) => { 
+  const response = await api.post("/users/auth/login", { 
+    email, 
+    password, 
+  });
+  return response.data;
+};

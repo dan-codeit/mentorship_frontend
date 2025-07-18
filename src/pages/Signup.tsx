@@ -1,7 +1,17 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import Input from "../components/common/Input";
+import { inputFields } from "../data/formData";
+import Roller from "../components/loader/Roller";
+import FieldError from "../components/errors/FieldError";
+import FormError from "../components/errors/FormError";
+import SuccessMessage from "../components/messages/successMessage";
+import { validateRequiredFields } from "../config/validations/validateFormField";
+import { validatePasswordMatch } from "../config/validations/validatePasswordMatch";
+import type { ErrorField } from "../config/types/error.field";
+import type { resError } from "../config/types/res.error";
+import loadingEffect from "../config/loader_effect/loadingEffect";
+
 
 const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +25,11 @@ const Signup: React.FC = () => {
     confirmPassword: "",
   });
 
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ field: string; message: string }[]>(
+    []
+  );
+  const [success, setSuccess] = useState("");
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -26,54 +40,91 @@ const Signup: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setSuccess("");
+    setErrors([]);
 
     const { email, password, confirmPassword, role } = formData;
 
-    if (!email || !password || !confirmPassword || !role) {
-      setError("All fields are required");
-      return;
-    }
+    const InputErrors: ErrorField[] = validateRequiredFields(
+      { email, password, confirmPassword },
+      {
+        email: "Email is required",
+        password: "Password is required",
+        confirmPassword: "Please confirm your password",
+      }
+    );
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      setError("Please enter a valid email address");
-      return;
+    if (email && !emailRegex.test(email)) {
+      InputErrors.push({ field: "email", message: "Invalid email address" });
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
+      InputErrors.push({
+        field: "password",
+        message: "Password must be at least 6 characters",
+      });
     }
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
+    InputErrors.push(...validatePasswordMatch(password, confirmPassword));
 
     if (!["mentee", "mentor"].includes(role)) {
-      setError("Invalid role selected");
+      InputErrors.push({
+        field: "role",
+        message: "Invalid role selected",
+      });
+    }
+
+    if (InputErrors.length > 0) {
+      setErrors(InputErrors);
       return;
     }
 
+    setLoading(true);
+
     try {
-      const response = await fetch(`${baseUrl}/users/auth/signup`, {
+      const response = await fetch(`${baseUrl}/users/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
-
       if (!response.ok) {
-        setError(data.message || "Signup failed");
+        setSuccess("");
+
+        if (data.errors && Array.isArray(data.errors)) {
+          const formattedErrors = data.errors.map((err: resError) => ({
+            field: err.path,
+            message: err.msg,
+          }));
+          setErrors(formattedErrors);
+        } else {
+          setErrors([
+            {
+              field: "form",
+              message: data.message || "Signup failed",
+            },
+          ]);
+        }
+
+        setLoading(false);
         return;
       }
 
+      setSuccess("Account created successfully!");
       navigate("/login");
+      setErrors([]);
     } catch (err) {
       console.error("Signup error:", err);
-      setError("Something went wrong. Please try again later.");
+      setErrors([
+        {
+          field: "form",
+          message: "Error in registering. Please try again later.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -87,63 +138,58 @@ const Signup: React.FC = () => {
                 Create an Account
               </h2>
 
-              {error && (
-                <div className="text-red-600 mb-4 text-center text-sm">
-                  {error}
-                </div>
-              )}
-              <form onSubmit={handleSubmit}>
-                <Input
-                  label="Email"
-                  type="email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="Enter your email"
-                />
+              <SuccessMessage message={success} />
+              <FormError errors={errors} />
 
-                {/* Role Selector */}
-                <div className="mb-4">
-                  <label className="block text-gray-700 font-medium mb-1">
-                    Role
-                  </label>
-                  <select
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-cyan-400"
-                  >
-                    <option value="mentee">Mentee</option>
-                    <option value="mentor">Mentor</option>
-                  </select>
-                </div>
+              <form onSubmit={handleSubmit} noValidate>
+                {inputFields.map((field) => {
+                  if (field.type === "select") {
+                    return (
+                      <div key={field.name} className="mb-4">
+                        <label className="block text-gray-700 font-medium mb-1">
+                          {field.label}
+                        </label>
 
-                <Input
-                  label="Password"
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Enter password"
-                />
-                <Input
-                  label="Confirm Password"
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  placeholder="Re-enter password"
-                />
+                        <select
+                          name={field.name}
+                          value={formData[field.name]}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        >
+                          <option value="mentee">Mentee</option>
+                          <option value="mentor">Mentor</option>
+                        </select>
+                        <FieldError errors={errors} field={field.name} />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={field.name}>
+                      <Input
+                        label={field.label}
+                        type={field.type}
+                        name={field.name}
+                        value={formData[field.name]}
+                        onChange={handleChange}
+                        placeholder={`Enter your ${field.label.toLowerCase()}`}
+                      />
+                      <FieldError errors={errors} field={field.name} />
+                    </div>
+                  );
+                })}
 
                 <button
                   type="submit"
-                  className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-4 rounded mt-4"
+                  disabled={loading}
+                  className={`w-full flex items-center h-8 justify-center bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-6 px-4 rounded mt-4 ${loadingEffect(loading)}`}
                 >
-                  Sign Up
+                  {loading ? <Roller /> : "Sign up"}
                 </button>
               </form>
+
               <div className="text-sm text-center mt-4">
-                Already have an account?{" "}
+                Already have an account?
                 <Link to="/login" className="text-cyan-600 hover:underline">
                   Login here
                 </Link>

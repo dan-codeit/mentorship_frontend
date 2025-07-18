@@ -27,3 +27,6 @@ code.Explain/
 *.sw?
 
 .vercel
+
+*storybook.log
+storybook-static
